@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#081524">
+<title>水弹泡泡岛 · 键盘 / 触屏闯关</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; user-select:none; -webkit-user-select:none; }
+  html { background:#081524; }
+  html,body { height:100%; overflow:hidden; }      /* 锁死滚动，防下拉（配合 overscroll-behavior + JS 双保险） */
+  body {
+    background: radial-gradient(ellipse at 50% 30%, #10304d 0%, #081524 70%);
+    display:flex; flex-direction:column; align-items:center;
+    justify-content:center; justify-content:safe center;
+    font-family:"Microsoft YaHei","PingFang SC",sans-serif; color:#eef6ff;
+    user-select:none; overscroll-behavior:none; -webkit-tap-highlight-color:transparent;
+    touch-action:none;
+  }
+  h1 { font-size:18px; letter-spacing:1px; margin:2px 0; color:#8fd0ff;
+       text-shadow:0 0 10px rgba(64,158,255,.45); }
+  #info { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; margin:4px 0; }
+  #info span {
+    background:rgba(20,52,84,.75); border:1px solid rgba(96,168,230,.35);
+    border-radius:6px; padding:2px 8px; font-size:12px; min-width:60px; text-align:center;
+  }
+  #stage { position:relative; }
+  canvas {
+    display:block; border-radius:12px;
+    box-shadow:0 0 0 3px rgba(70,140,210,.35), 0 14px 44px rgba(0,0,0,.55);
+    background:#0a1f38;
+    width:min(560px, calc(100vw - 20px)); height:auto; aspect-ratio:1/1;
+  }
+  #stage{ touch-action:none; }
+  .keys { margin-top:6px; font-size:13px; line-height:1.6; text-align:center; max-width:900px; color:#eaf5ff; }
+  .k { display:inline-block; min-width:18px; text-align:center; background:#1c3a5c;
+       border:1px solid #3d6a99; border-bottom-width:3px; border-radius:4px;
+       padding:0 6px; margin:0 2px; color:#cfeaff; font-size:11px; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:3px; vertical-align:middle; margin:0 4px 0 10px; }
+  .touch-hints{ display:none; }
+  /* ==== 手机端触控 UI ==== */
+  #pausebtn{ display:none; position:absolute; top:3px; right:2px; z-index:5;
+    width:44px; height:44px; border-radius:12px;
+    background:rgba(20,52,84,.78); border:1px solid rgba(96,168,230,.5);
+    color:#bfe3ff; font-size:18px; line-height:1;
+    touch-action:none; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-touch-callout:none; }
+  #pausebtn.pressed{ background:rgba(46,100,160,.95); }
+  #controls{ display:none; align-items:center; justify-content:space-between;
+    width:min(560px, calc(100vw - 20px)); margin:10px auto 2px; touch-action:none; }
+  #controls button{ -webkit-touch-callout:none; }
+  #joy{ position:relative; width:124px; height:124px; border-radius:50%;
+    background:radial-gradient(circle at 50% 42%, rgba(34,78,124,.9), rgba(16,42,70,.9) 70%);
+    border:1px solid rgba(96,168,230,.55);
+    box-shadow:inset 0 0 14px rgba(0,0,0,.45), 0 4px 12px rgba(0,0,0,.35);
+    touch-action:none; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-touch-callout:none; }
+  #joy-knob{ position:absolute; left:50%; top:50%; width:56px; height:56px; margin:-28px 0 0 -28px;
+    border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, rgba(235,250,255,.95), rgba(140,205,255,.9) 45%, rgba(50,130,225,.9));
+    border:2px solid rgba(20,80,160,.7);
+    box-shadow:0 3px 10px rgba(0,0,0,.45);
+    display:flex; align-items:center; justify-content:center;
+    pointer-events:none; will-change:transform; }
+  #joy-knob::after{ content:""; position:absolute; width:18px; height:18px; border-radius:50%;
+    background:rgba(255,255,255,.55); box-shadow:0 0 8px rgba(255,255,255,.6); }
+  #joy.active{ background:radial-gradient(circle at 50% 42%, rgba(46,100,160,.95), rgba(18,48,82,.95) 70%); }
+  #bombbtn{ width:78px; height:78px; border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, rgba(230,250,255,.95), rgba(120,195,255,.9) 45%, rgba(40,120,220,.9));
+    border:2px solid rgba(20,80,160,.7); font-size:30px; line-height:1;
+    box-shadow:0 6px 18px rgba(0,0,0,.4);
+    touch-action:none; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-touch-callout:none; }
+  #bombbtn.pressed{ filter:brightness(1.3); }
+  @media (pointer:coarse), (max-width:700px){
+    #pausebtn{ display:block; }
+    #controls{ display:flex; }
+    .kb-hints{ display:none !important; }
+    .touch-hints{ display:block !important; }
+  }
+</style>
+</head>
+<body>
+<h1>💦 水弹泡泡岛</h1>
+<div id="info">
+  <span id="iv-level">关卡 1</span>
+  <span id="iv-time">时间 120</span>
+  <span id="iv-life">❤️ 3</span>
+  <span id="iv-score">得分 0</span>
+  <span id="iv-bomb">水弹 1</span>
+  <span id="iv-mon">👾 0</span>
+</div>
+<div id="stage">
+  <canvas id="cv" width="560" height="560"></canvas>
+  <button id="pausebtn" type="button" aria-label="暂停/继续">⏸</button>
+</div>
+<div id="controls">
+  <div id="joy" aria-label="移动摇杆">
+    <div id="joy-knob"></div>
+  </div>
+  <button id="bombbtn" type="button" aria-label="放水弹">💧</button>
+</div>
+<div class="keys kb-hints">
+  <span class="k">W</span><span class="k">A</span><span class="k">S</span><span class="k">D</span> / <span class="k">↑</span><span class="k">↓</span><span class="k">←</span><span class="k">→</span> 移动
+  <span class="k">空格</span> 放水弹 · <span class="k">P</span> 暂停 · <span class="k">回车</span> 结束重开<br>
+  水弹放置后十字爆炸 · 射线炸到第一块墙即停（不穿墙，一次只炸开一块墙体） · 紫色👾怪物开局固定刷出，会被墙/水弹挡住、会绕路追你<br>
+  水弹可炸死怪物、炸开砖（实心水墙🌊炸不掉，当永久墙挡路） · 金色水门打光全部怪物后 变绿、可直接走进 · 过关=全怪已清 + 走进水门 · 怪碰到你扣 1 命并重生（进度保留）<br>
+  <span class="dot" style="background:#62e26b"></span>加速 &nbsp;
+  <span class="dot" style="background:#59a8ff"></span>射程+1（最多3格） &nbsp;
+  <span class="dot" style="background:#ff7ab8"></span>水弹+1（最多3颗） &nbsp;
+  <span class="dot" style="background:#ff4d6d"></span>爱心+1命（最多5）
+</div>
+<div class="keys touch-hints">
+  左下 <b>摇杆</b> 移动（按住拖动只走直路、不斜走，偏得越多跑得越快） · 右下 <b>💧</b> 放水弹 · 右上 <b>⏸</b> 暂停/继续<br>
+  点按画布：开始 · 继续 · 重新开始<br>
+  水弹十字爆炸 · 射线只炸到第一块墙（不穿墙） · 砖可炸、🌊实心水墙炸不掉 · 水门清光全部怪物后变绿、可直接走进<br>
+  紫色👾怪开局固定刷出、会被墙挡住并绕路追你 · 碰到你扣 1 命并重生（进度保留）
+</div>
+<script>
+"use strict";
+/* ============ 常量 ============ */
+const TILE=40, W=560, H=560;
+const cv=document.getElementById("cv"), ctx=cv.getContext("2d");
+const TIME_LIMIT=120, BASE_SPEED=210, SPEED_MUL=1.4, MAX_RANGE=3, MAX_BOMBS=3, MAX_LIVES=5;
+const BOMB_ARM=2.4, BLAST_DUR=0.5;
+const MON_SPEED=88;          // 小怪移动速度(px/s)
+const CHASE_RANGE=6;                      // 玩家在这格距离内→怪物转向追击
+const PU_TYPES=[
+  {id:"speed", color:"#62e26b", label:"速"},
+  {id:"range", color:"#59a8ff", label:"长"},
+  {id:"bomb",  color:"#ff7ab8", label:"多"},
+  {id:"life",  color:"#ff4d6d", label:"❤"}
+];
+// 道具掉落：常规三件套 + 少量爱心(命)，让爱心偏稀有
+function pickPU(){
+  if(Math.random()<0.18) return PU_TYPES[3]; // ~18% 爱心
+  return PU_TYPES[(Math.random()*3)|0];       // 其余 速/长/多
+}
+/* 地图：X 砖 | ~ 实心水墙(不可炸，永久墙) | B 水门 | M 怪物出生点(可走空地) | S 玩家出生点 | . 水面 */
+const MAPS=[
+ {name:"新手浅滩", w:13, h:13, rows:[
+  "XXXXXXXXXXXXX",
+  "X.........~~X",
+  "X..X..S.....X",
+  "XX....X.....X",
+  "X...X.......X",
+  "XX..........X",
+  "X...........X",
+  "X.XM......X.X",
+  "X...X...~..XX",
+  "X.B.........X",
+  "XX........M.X",
+  "X...........X",
+  "XXXXXXXXXXXXX"
+ ]},
+ {name:"回水回廊", w:13, h:13, rows:[
+  "XXXXXXXXXXXXX",
+  "X.X.XX...X..X",
+  "X..X..S.....X",
+  "X.X~.X.X....X",
+  "X........X..X",
+  "XM.....X....X",
+  "X...X.XX..X.X",
+  "X.X....~.X.XX",
+  "X.......X...X",
+  "X....M....BXX",
+  "X...M.X.X...X",
+  "X...........X",
+  "XXXXXXXXXXXXX"
+ ]},
+ {name:"双池迷境", w:13, h:13, rows:[
+  "XXXXXXXXXXXXX",
+  "XXX...X.....X",
+  "X....~S..X..X",
+  "X......X....X",
+  "XX......~.X.X",
+  "X.XXX.......X",
+  "XM.X..X.X...X",
+  "X.~X....M...X",
+  "XX..XXX.....X",
+  "X..B.X.X....X",
+  "XXXM...M....X",
+  "X...........X",
+  "XXXXXXXXXXXXX"
+ ]},
+ {name:"漩涡回廊", w:13, h:13, rows:[
+  "XXXXXXXXXXXXX",
+  "X..........XX",
+  "XX..~.S...XXX",
+  "X.....X.....X",
+  "X........X..X",
+  "X..X.X..X...X",
+  "XXM.MX.XM~..X",
+  "X.XM.X..X..XX",
+  "XXX.XXX.....X",
+  "X..X.X.BX.X.X",
+  "XX...M.X....X",
+  "X...........X",
+  "XXXXXXXXXXXXX"
+ ]},
+ {name:"大漩涡深处", w:13, h:13, rows:[
+  "XXXXXXXXXXXXX",
+  "X..X.X.X....X",
+  "XX~.X.S.~.X.X",
+  "XXX..~...X..X",
+  "X...........X",
+  "X....X.....XX",
+  "X..X..X.....X",
+  "X...M.X.X.XXX",
+  "X.....M.M..XX",
+  "X..M.X....M.X",
+  "X.B..MXX....X",
+  "X...........X",
+  "XXXXXXXXXXXXX"
+ ]},
+ {name:"逆流暗礁", w:13, h:13, rows:[
+  "XXXXXXXXXXXXX",
+  "X......XX...X",
+  "X.X...S....XX",
+  "X...........X",
+  "X.....~.X...X",
+  "X...........X",
+  "XX..XX......X",
+  "XX..~..XM..MX",
+  "X.~..M.X..X.X",
+  "XX...X.M.M..X",
+  "X.BM...XM.~.X",
+  "X...........X",
+  "XXXXXXXXXXXXX"
+ ]},
+ {name:"深渊回廊", w:13, h:13, rows:[
+  "XXXXXXXXXXXXX",
+  "X..X.~......X",
+  "X.~...S...~.X",
+  "X.X.......X.X",
+  "X.X.........X",
+  "XM.M....X..XX",
+  "X..X......X.X",
+  "X.M.........X",
+  "X...M.XM....X",
+  "X.B...M...X.X",
+  "XX.M.XX..M..X",
+  "X...........X",
+  "XXXXXXXXXXXXX"
+ ]},
+ {name:"碎浪迷宫", w:13, h:13, rows:[
+  "XXXXXXXXXXXXX",
+  "X....X......X",
+  "X.....S.X...X",
+  "X...........X",
+  "X...........X",
+  "X..M......M.X",
+  "X.X.....X..MX",
+  "XX........XXX",
+  "XX.X...X..M.X",
+  "X..M..BM.X.MX",
+  "XMX.~XX.MX~.X",
+  "X...........X",
+  "XXXXXXXXXXXXX"
+ ]},
+ {name:"漩涡核心", w:13, h:13, rows:[
+  "XXXXXXXXXXXXX",
+  "X.X.....XX..X",
+  "X.....S...X.X",
+  "X....X.X..X.X",
+  "X.~.........X",
+  "X.......XM..X",
+  "XX.X.....XX.X",
+  "XM.XM...M...X",
+  "X...~MB...MXX",
+  "X.....MXX.X~X",
+  "X..M.M..M.XXX",
+  "X...........X",
+  "XXXXXXXXXXXXX"
+ ]},
+ {name:"无尽深潭", w:13, h:13, rows:[
+  "XXXXXXXXXXXXX",
+  "X....X...X.~X",
+  "X.....S.XX..X",
+  "X...........X",
+  "X..X..X.....X",
+  "XX.M.....M..X",
+  "XMX.M.X..XXXX",
+  "X~XXXXX.M...X",
+  "X....XM..X..X",
+  "X....MX...XMX",
+  "X.MXM..MXB.~X",
+  "X...........X",
+  "XXXXXXXXXXXXX"
+ ]},
+];
+
+/* ============ 音效（WebAudio 合成） ============ */
+let AC=null;
+function ensureAudio(){
+  if(AC) return;
+  try{ AC=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ AC=null; }
+}
+function tone(f,d,type,vol,slide){
+  if(!AC) return;
+  const t0=AC.currentTime;
+  const o=AC.createOscillator(), g=AC.createGain();
+  o.type=type||"sine"; o.frequency.setValueAtTime(f,t0);
+  if(slide) o.frequency.exponentialRampToValueAtTime(slide,t0+d);
+  g.gain.setValueAtTime(vol||0.12,t0);
+  g.gain.exponentialRampToValueAtTime(0.0001,t0+d);
+  o.connect(g); g.connect(AC.destination);
+  o.start(t0); o.stop(t0+d+0.03);
+}
+function noise(d,vol,fc){
+  if(!AC) return;
+  const t0=AC.currentTime;
+  const n=Math.floor(AC.sampleRate*d), buf=AC.createBuffer(1,n,AC.sampleRate);
+  const ch=buf.getChannelData(0);
+  for(let i=0;i<n;i++) ch[i]=(Math.random()*2-1)*(1-i/n);
+  const src=AC.createBufferSource(); src.buffer=buf;
+  const f=AC.createBiquadFilter(); f.type="lowpass"; f.frequency.value=fc||900;
+  const g=AC.createGain(); g.gain.setValueAtTime(vol||0.25,t0);
+  g.gain.exponentialRampToValueAtTime(0.0001,t0+d);
+  src.connect(f); f.connect(g); g.connect(AC.destination); src.start(t0);
+}
+function sfxPlace(){ tone(860,0.06,"triangle",0.1,620); }
+function sfxBoom(){ noise(0.3,0.4,700); tone(70,0.32,"sine",0.35,38); }
+function sfxPower(){ [523,659,784].forEach((f,i)=>setTimeout(()=>tone(f,0.13,"sine",0.14),i*55)); }
+function sfxComplete(){ [523,659,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,0.22,"sine",0.14),i*95)); }
+function sfxDie(){ tone(330,0.5,"sawtooth",0.15,120); }
+
+/* ============ 状态 ============ */
+let state="play", stateT=0;
+let levelIdx=0, score=0, lives=3;
+let grid=[], exitCols=[], powerups=[], bombs=[], blasts=[], particles=[], startCell=null, monSpots=[];
+let monsters=[];   // 固定怪物（开局按 M 出生点刷出）
+let levelTime=TIME_LIMIT;
+const player={ x:1,y:1, px:0,py:0, speed:BASE_SPEED, range:1, bombsMax:1,
+               face:{x:0,y:1}, invuln:0 };
+
+function inBounds(cx,cy){ return cx>=0&&cy>=0&&cx<grid.length&&cy<grid[0].length; }
+function tileAt(cx,cy){ return inBounds(cx,cy)?grid[cy][cx]:2; }
+function isSolidTile(t){ return t===1||t===2||t===3||t===4; } // 砖(1)、水波(2)、水门(3)、边界石壁(4) 阻挡移动；M 是可走出生点
+// 玩家能否站在某格：怪物全清后水门(3)解锁、可直接走进；否则水门当实心墙挡路
+const MARG=6;                                    // 玩家碰撞盒内缩(px)
+function playerCellPassable(c,r){
+  const t=tileAt(c,r);
+  if(t===3) return monsters.length===0;         // 水门：全清后可进
+  return !isSolidTile(t);
+}
+// 检查 28×28 碰撞盒 [px+MARG,px+TILE-MARG]×[py+MARG,py+TILE-MARG] 是否压到不可站立格（越界按不可）
+function boxBlocked(px,py){
+  const c0=Math.floor((px+MARG)/TILE), c1=Math.floor((px+TILE-MARG)/TILE);
+  const r0=Math.floor((py+MARG)/TILE), r1=Math.floor((py+TILE-MARG)/TILE);
+  for(let r=r0;r<=r1;r++) for(let c=c0;c<=c1;c++)
+    if(!playerCellPassable(c,r)) return true;
+  return false;
+}
+function bombAt(cx,cy){ return bombs.some(b=>b.x===cx&&b.y===cy); } // 水弹为实体，挡路
+
+function initLevel(){
+  const M=MAPS[levelIdx];
+  exitCols=[]; powerups=[]; bombs=[]; blasts=[]; particles=[];
+  monSpots=[]; monsters=[];
+  grid=[]; startCell=null;
+  for(let r=0;r<M.h;r++){
+    const row=[];
+    for(let c=0;c<M.w;c++){
+      const ch=M.rows[r][c];
+      let t=0;
+      if(ch==="X") t=(r===0||r===M.h-1||c===0||c===M.w-1)?4:1; // 边界圈=石壁(4)不可炸，内部=砖(1)可炸
+      else if(ch==="~") t=2;
+      else if(ch==="B"){ t=3; exitCols.push([c,r]); } // 水门：怪物全清后变绿、可直接走进过关
+      else if(ch==="M"){ t=0; monSpots.push([c,r]); }  // 怪物出生点：可走空地
+      else if(ch==="S") startCell={x:c,y:r};
+      row.push(t);
+    }
+    grid.push(row);
+  }
+  player.x=startCell.x; player.y=startCell.y;
+  player.px=player.x*TILE; player.py=player.y*TILE;
+  player.speed=BASE_SPEED; player.range=1; player.bombsMax=1; player.invuln=0;
+  levelTime=TIME_LIMIT;
+  // 固定刷怪：每个 M 出生点放一只，打完不再刷新
+  for(const [c,r] of monSpots) monsters.push(makeMonster(c*TILE+TILE/2, r*TILE+TILE/2));
+  state="play"; stateT=0;
+  updateHud();
+}
+
+function updateHud(){
+  document.getElementById("iv-level").textContent="关卡 "+(levelIdx+1)+"/"+MAPS.length+" "+MAPS[levelIdx].name;
+  document.getElementById("iv-time").textContent="时间 "+Math.max(0,Math.ceil(levelTime));
+  document.getElementById("iv-life").textContent="❤️ "+Math.max(0,lives);
+  document.getElementById("iv-score").textContent="得分 "+score;
+  document.getElementById("iv-bomb").textContent="水弹 "+bombs.length+"/"+player.bombsMax;
+  document.getElementById("iv-mon").textContent="👾 "+monsters.length;
+}
+
+/* ============ 爆炸 ============ */
+function detonate(b){
+  const cx=b.x, cy=b.y;
+  const cells=[[cx,cy]];
+  const destroyedCells=[];    // 真正被炸毁的格（区别于整片爆炸范围 cells）
+  let destroyed=0, killedMon=0;
+  for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+    for(let i=1;i<=player.range;i++){
+      const nx=cx+dx*i, ny=cy+dy*i;
+      if(!inBounds(nx,ny)) break;
+      cells.push([nx,ny]);
+      const t=grid[ny][nx];
+      if(t===4||t===2) break; // 边界石壁/实心水墙：射线止于此，不可炸
+      if(t===3) break;        // 水门：射线止于此，不再可炸（怪物全清后改由直接走进过关）
+      if(t===1){
+        grid[ny][nx]=0; destroyed++;
+        destroyedCells.push([nx,ny]);
+        if(Math.random()<0.2) powerups.push({x:nx,y:ny,type:pickPU(),t:0}); // 砖 20% 掉道具
+        break;
+      }
+      // t===0 空地：射线穿透
+    }
+  }
+  // 炸死爆炸范围内的小怪
+  for(let i=monsters.length-1;i>=0;i--){
+    const mo=monsters[i];
+    const mcx=Math.round(mo.px/TILE), mcy=Math.round(mo.py/TILE);
+    if(cells.some(([x,y])=>x===mcx&&y===mcy)){
+      monsters.splice(i,1); killedMon++;
+      for(let j=0;j<12;j++)
+        particles.push({x:mcx*TILE+TILE/2,y:mcy*TILE+TILE/2,
+          vx:(Math.random()-0.5)*180,vy:(Math.random()-0.5)*180-20,
+          life:0.45,max:0.45,r:2.5+Math.random()*2,bubble:false});
+    }
+  }
+  const chain=[];
+  for(const bb of bombs){
+    if(bb!==b && cells.some(([x,y])=>x===bb.x&&y===bb.y)) chain.push(bb);
+  }
+  blasts.push({cells,dur:0});
+  for(const [bx,by] of cells){
+    for(let i=0;i<6;i++){
+      particles.push({x:bx*TILE+Math.random()*TILE, y:by*TILE+Math.random()*TILE,
+        vx:(Math.random()-0.5)*130, vy:(Math.random()-0.5)*130-30,
+        life:0.5+Math.random()*0.35, max:0.85, r:2+Math.random()*3.5,
+        bubble:Math.random()<0.4});
+    }
+  }
+  score += cells.length*2 + destroyed*10 + killedMon*30;
+  sfxBoom();
+  // 自己溅到
+  if(cells.some(([x,y])=>x===player.x&&y===player.y) && player.invuln<=0 && state==="play") die();
+  for(const cb of chain){
+    const k=bombs.indexOf(cb);
+    if(k>=0) bombs.splice(k,1);
+    detonate(cb);
+  }
+}
+
+// 死亡重生：保留关卡进度（炸开的砖、打掉的怪、剩的水弹、水门解锁状态），只重生玩家
+function respawn(){
+  state="play"; stateT=0;
+  player.x=startCell.x; player.y=startCell.y;
+  player.px=player.x*TILE; player.py=player.y*TILE;
+  if(levelTime<=0) levelTime=TIME_LIMIT;  // 超时被杀：重生后重新计满倒计时，避免同一关连续掉命
+  player.invuln=2.0;                       // 2 秒无敌，防止出生点被贴
+  // 把贴脸的怪暂时推开，避免刚出生就再被撞
+  for(const mo of monsters){
+    const dx=mo.px-player.px, dy=mo.py-player.py, d=Math.hypot(dx,dy)||1;
+    if(d<TILE*1.6){ mo.px=player.px+dx/d*TILE*1.6; mo.py=player.py+dy/d*TILE*1.6; }
+  }
+  updateHud();
+}
+function complete(){
+  if(state!=="play") return;
+  state="complete"; stateT=1.5;
+  score+=100;
+  sfxComplete();
+}
+function die(){
+  if(state!=="play") return;
+  state="dying"; stateT=0.9;
+  sfxDie();
+}
+
+/* ============ 怪物（网格寻路：巡逻+追击，受墙体阻挡） ============ */
+function cellFree(cx,cy){ return inBounds(cx,cy) && grid[cy][cx]===0; }
+function manhattan(ax,ay,bx,by){ return Math.abs(ax-bx)+Math.abs(ay-by); }
+// 从 (sx,sy) 到 (tx,ty) 的 BFS 完整路径（格坐标数组），走不到返回 null
+function bfsPath(sx,sy,tx,ty){
+  if(sx===tx&&sy===ty) return [];
+  const Wd=grid[0].length, Hd=grid.length;
+  const prev=new Array(Wd*Hd).fill(-1);
+  prev[sy*Wd+sx]=sy*Wd+sx;
+  const q=[sy*Wd+sx];
+  const goal=ty*Wd+tx;
+  let found=false;
+  while(q.length){
+    const cur=q.shift();
+    const cx=cur%Wd, cy=(cur/Wd)|0;
+    if(cur===goal){ found=true; break; }
+    for(const [dc,dr] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nc=cx+dc, nr=cy+dr, ni=nr*Wd+nc;
+      if(!inBounds(nc,nr)||grid[nr][nc]!==0||bombAt(nc,nr)) continue; // 墙/水弹都挡路
+      if(prev[ni]!==-1) continue;
+      prev[ni]=cur; q.push(ni);
+    }
+  }
+  if(!found) return null;
+  const startIdx=sy*Wd+sx;
+  const path=[]; let n=goal;
+  while(n!==startIdx){ path.push([n%Wd,(n/Wd)|0]); n=prev[n]; }
+  path.reverse();
+  return path;
+}
+// 生成怪物们的随机巡逻目标（可走格）
+function randomWalkableCell(){
+  const Wd=grid[0].length, Hd=grid.length;
+  for(let k=0;k<40;k++){
+    const cx=(Math.random()*Wd)|0, cy=(Math.random()*Hd)|0;
+    if(grid[cy][cx]===0 && !bombAt(cx,cy)) return [cx,cy];
+  }
+  return null;
+}
+function makeMonster(px,py){
+  return { px, py, cx:Math.round((px-TILE/2)/TILE), cy:Math.round((py-TILE/2)/TILE),
+           wx:0, wy:0, path:[], repath:0, wob:Math.random()*7 };
+}
+function stepMonsters(dt){
+  for(let i=monsters.length-1;i>=0;i--){
+    const mo=monsters[i];
+    mo.wob+=dt;
+    mo.cx=Math.round((mo.px-TILE/2)/TILE);
+    mo.cy=Math.round((mo.py-TILE/2)/TILE);
+    mo.repath-=dt;
+    const distToPlayer=manhattan(mo.cx,mo.cy,player.x,player.y);
+    const chasing = distToPlayer<=CHASE_RANGE;
+    let tx=-1, ty=-1, recompute=false;
+    if(chasing){
+      tx=player.x; ty=player.y;
+      recompute = mo.repath<=0;               // 追击中每 0.35s 重算一次（玩家可能移动）
+    } else {
+      if(mo.path.length===0){ const w=randomWalkableCell(); if(w){ mo.wx=w[0]; mo.wy=w[1]; } }
+      if(mo.wx>=0){ tx=mo.wx; ty=mo.wy; recompute=true; } // 到达巡逻点即换新目标
+    }
+    if(recompute && tx>=0 && (tx!==mo.cx||ty!==mo.cy)){
+      const p=bfsPath(mo.cx,mo.cy,tx,ty);
+      if(p){ mo.path=p; mo.repath = chasing?0.35:0; }
+    }
+    // 路径首格被水弹挡住则作废重寻
+    if(mo.path.length && bombAt(mo.path[0][0],mo.path[0][1])){
+      mo.path=[]; mo.repath=0;
+    }
+    // 沿路径逐格平滑移动
+    if(mo.path.length){
+      const [nx,ny]=mo.path[0];
+      if(!bombAt(nx,ny)){
+        const tcx=nx*TILE+TILE/2, tcy=ny*TILE+TILE/2;
+        const ddx=tcx-mo.px, ddy=tcy-mo.py, d=Math.hypot(ddx,ddy)||1;
+        const mv=MON_SPEED*dt;
+        if(d<=mv){ mo.px=tcx; mo.py=tcy; mo.path.shift(); }
+        else { mo.px+=ddx/d*mv; mo.py+=ddy/d*mv; }
+      }
+    }
+    // 接触扣命
+    const pdx=(player.px+TILE/2)-mo.px, pdy=(player.py+TILE/2)-mo.py;
+    if(Math.hypot(pdx,pdy)<TILE*0.42 && player.invuln<=0 && state==="play") die();
+  }
+}
+
+/* ============ 主循环 ============ */
+let lastT=0;
+function frame(now){
+  const dt=Math.min(0.05,(now-lastT)/1000||0);
+  lastT=now;
+  step(dt);
+  draw(now/1000);
+  requestAnimationFrame(frame);
+}
+
+function step(dt){
+  if(state==="ready"||state==="pause"){ updateHud(); return; }
+  if(state==="dying"){
+    stateT-=dt;
+    if(stateT<=0){
+      lives--;
+      if(lives<=0) state="over";
+      else respawn();
+    }
+    updateHud();
+    return;
+  }
+  if(state==="complete"){
+    stateT-=dt;
+    if(stateT<=0){
+      levelIdx++;
+      if(levelIdx>=MAPS.length) state="win";
+      else initLevel();
+    }
+    return;
+  }
+  if(state==="over"||state==="win") return;
+
+  levelTime-=dt;
+  if(levelTime<=0){ die(); return; }
+
+  let dx=0, dy=0;
+  if(keys.has("ArrowLeft")||keys.has("KeyA")) dx--;
+  if(keys.has("ArrowRight")||keys.has("KeyD")) dx++;
+  if(keys.has("ArrowUp")||keys.has("KeyW")) dy--;
+  if(keys.has("ArrowDown")||keys.has("KeyS")) dy++;
+  dx+=joyVec.x; dy+=joyVec.y;                 // 摇杆模拟量（手机端）
+  const dLen=Math.hypot(dx,dy);
+  if(dLen>1){ dx/=dLen; dy/=dLen; }           // 键盘+摇杆叠加幅度封顶 1，保持速度一致
+  if(dx!==0||dy!==0) player.face={x:dx,y:dy};
+  const v=player.speed*dt;
+  if(dx!==0){
+    const px=player.px+dx*v;
+    if(!boxBlocked(px,player.py)) player.px=px;      // 整盒 28×28 碰撞，防卡墙
+  }
+  if(dy!==0){
+    const py=player.py+dy*v;
+    if(!boxBlocked(player.px,py)) player.py=py;
+  }
+  if(dx===0){
+    const tx=player.x*TILE, diff=tx-player.px, s=v*2;
+    const nx=Math.abs(diff)<=s ? tx : player.px+Math.max(-s,Math.min(s,diff));
+    if(!boxBlocked(nx,player.py)) player.px=nx;       // 对心时也不进墙
+  }
+  if(dy===0){
+    const ty=player.y*TILE, diff=ty-player.py, s=v*2;
+    const ny=Math.abs(diff)<=s ? ty : player.py+Math.max(-s,Math.min(s,diff));
+    if(!boxBlocked(player.px,ny)) player.py=ny;
+  }
+  player.x=Math.round(player.px/TILE);
+  player.y=Math.round(player.py/TILE);
+  if(player.invuln>0) player.invuln-=dt;
+
+  // 走进已解锁的水门（怪物全清后变绿、可直接进）→ 立即过关
+  if(state==="play" && monsters.length===0 &&
+     exitCols.some(([ex,ey])=>ex===player.x&&ey===player.y))
+    complete();
+
+  for(let i=powerups.length-1;i>=0;i--){
+    const p=powerups[i]; p.t+=dt;
+    if(p.x===player.x&&p.y===player.y){
+      if(p.type.id==="speed") player.speed=BASE_SPEED*SPEED_MUL;
+      else if(p.type.id==="range") player.range=Math.min(MAX_RANGE,player.range+1);
+      else if(p.type.id==="life") lives=Math.min(MAX_LIVES,lives+1); // 爱心：+1 命
+      else player.bombsMax=Math.min(MAX_BOMBS,player.bombsMax+1); // 上限+1，可再铺一颗
+      score+=20;
+      powerups.splice(i,1);
+      sfxPower();
+      for(let j=0;j<10;j++)
+        particles.push({x:p.x*TILE+TILE/2,y:p.y*TILE+TILE/2,
+          vx:(Math.random()-0.5)*160,vy:(Math.random()-0.5)*160,
+          life:0.4,max:0.4,r:2+Math.random()*2.5,bubble:false});
+      updateHud();
+    }
+  }
+
+  for(let i=bombs.length-1;i>=0;i--){
+    const b=bombs[i];
+    b.t+=dt;
+    if(b.t>=BOMB_ARM){
+      bombs.splice(i,1);
+      detonate(b);
+    }
+  }
+  /* 怪物：网格寻路（巡逻+追击，被墙体挡住） */
+  stepMonsters(dt);
+  for(let i=blasts.length-1;i>=0;i--){
+    blasts[i].dur+=dt;
+    if(blasts[i].dur>BLAST_DUR) blasts.splice(i,1);
+  }
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.life-=dt;
+    p.x+=p.vx*dt; p.y+=p.vy*dt;
+    p.vy-= (p.bubble?-50:120)*dt;
+    if(p.life<=0) particles.splice(i,1);
+  }
+  updateHud();
+}
+
+/* ============ 输入 ============ */
+const keys=new Set();
+const KEYMAP={ "Space":1, ArrowUp:1, ArrowDown:1, ArrowLeft:1, ArrowRight:1,
+  KeyW:1, KeyA:1, KeyS:1, KeyD:1 };
+window.addEventListener("keydown",e=>{
+  ensureAudio();
+  if(KEYMAP[e.code]) e.preventDefault();
+  if(e.code==="KeyP"){
+    if(state==="play") state="pause";
+    else if(state==="pause") state="play";
+    return;
+  }
+  if(e.repeat) return;
+  keys.add(e.code);
+  if(state==="ready" && (e.code==="Space"||e.code==="Enter")){
+    state="play"; sfxPower(); updateHud(); return;   // 空格开始游戏
+  }
+  if(e.code==="Space" && state==="play") placeBomb();
+  if((e.code==="Enter"||e.code==="Space") && (state==="over"||state==="win")){
+    levelIdx=0; score=0; lives=3; initLevel(); state="ready"; updateHud();
+  }
+});
+window.addEventListener("keyup",e=>keys.delete(e.code));
+window.addEventListener("blur",()=>{ if(state==="play") state="pause"; });
+
+function placeBomb(){
+  const cx=player.x, cy=player.y;
+  if(bombs.some(b=>b.x===cx&&b.y===cy)) return;     // 脚下已有水弹
+  if(bombs.length>=player.bombsMax) return;            // 场上已铺满上限
+  bombs.push({x:cx,y:cy,t:0});
+  sfxPlace();
+  updateHud();
+}
+
+/* ============ 手机触控（方向键 / 💧放弹 / ⏸暂停 / 点按画布） ============ */
+const IS_TOUCH = (window.matchMedia && matchMedia("(pointer:coarse)").matches) || "ontouchstart" in window;
+const pausebtn=document.getElementById("pausebtn");
+const bombbtn=document.getElementById("bombbtn");
+
+// 左下摇杆：按住 360° 拖动，模拟量方向向量驱动移动（含死区），松手回中
+const joy=document.getElementById("joy"), joyKnob=document.getElementById("joy-knob");
+const joyVec={x:0,y:0};
+const JOY_MAX=44;                      // 摇杆头最大偏移(px)
+const JOY_DEAD=0.18;                   // 死区（避免微抖动）
+const JOY_HYST=1.35;                   // 轴锁滞回系数：副轴须达到主轴 1.35 倍才切换，防止对角线附近频繁跳轴
+let joyPointer=null, joyAxis=0;        // joyAxis: 0=未定，1=水平轴，-1=垂直轴
+function joyUpdate(e){
+  const r=joy.getBoundingClientRect();
+  const rawX=e.clientX-(r.left+r.width/2), rawY=e.clientY-(r.top+r.height/2);
+  const d=Math.hypot(rawX,rawY);
+  // 摇杆头随手指 360° 自由转动（圆形限幅），保证拖动手感流畅；只有移动方向做轴锁定
+  let kx=rawX, ky=rawY;
+  if(d>JOY_MAX){ kx=rawX/d*JOY_MAX; ky=rawY/d*JOY_MAX; }
+  joyKnob.style.transform=`translate(${kx}px,${ky}px)`;
+  const ax=Math.abs(kx), ay=Math.abs(ky);
+  if(d<=JOY_MAX*JOY_DEAD){ joyVec.x=0; joyVec.y=0; joyAxis=0; }
+  else {
+    if(joyAxis===0) joyAxis = ax>=ay ? 1 : -1;              // 首次出死区：取当前主轴
+    else if(joyAxis===1 && ay>ax*JOY_HYST) joyAxis=-1;      // 明显更偏垂直 → 切垂直轴
+    else if(joyAxis===-1 && ax>ay*JOY_HYST) joyAxis=1;      // 明显更偏水平 → 切水平轴
+    if(joyAxis===1){ joyVec.x=Math.max(-1,Math.min(1,kx/JOY_MAX)); joyVec.y=0; }
+    else { joyVec.x=0; joyVec.y=Math.max(-1,Math.min(1,ky/JOY_MAX)); }
+  }
+  joy.classList.add("active");
+}
+function joyRelease(){
+  joyVec.x=0; joyVec.y=0; joyAxis=0;
+  joyKnob.style.transform="translate(0,0)";
+  joy.classList.remove("active");
+}
+joy.addEventListener("pointerdown",e=>{
+  e.preventDefault(); ensureAudio();
+  joyPointer=e.pointerId;
+  joy.setPointerCapture(e.pointerId);
+  joyUpdate(e);
+});
+joy.addEventListener("pointermove",e=>{ if(e.pointerId===joyPointer) joyUpdate(e); });
+for(const ev of ["pointerup","pointercancel"]){
+  joy.addEventListener(ev,e=>{ if(e.pointerId===joyPointer){ joyPointer=null; joyRelease(); } });
+}
+// 右下 💧：按下放水弹
+bombbtn.addEventListener("pointerdown",e=>{
+  e.preventDefault(); ensureAudio(); bombbtn.classList.add("pressed");
+  if(state==="play") placeBomb();
+});
+for(const ev of ["pointerup","pointercancel","pointerleave"])
+  bombbtn.addEventListener(ev,()=>bombbtn.classList.remove("pressed"));
+// 右上 ⏸：暂停 / 继续
+pausebtn.addEventListener("pointerdown",e=>{
+  e.preventDefault(); ensureAudio();
+  if(state==="play") state="pause";
+  else if(state==="pause") state="play";
+  updateHud();
+});
+// 点按画布：开始 / 继续 / 重新开始（手机专用；桌面仍走键盘）
+cv.addEventListener("pointerdown",e=>{
+  if(!IS_TOUCH) return;
+  e.preventDefault(); ensureAudio();
+  if(state==="ready"){ state="play"; sfxPower(); updateHud(); }
+  else if(state==="pause"){ state="play"; updateHud(); }
+  else if(state==="over"||state==="win"){ levelIdx=0; score=0; lives=3; initLevel(); state="play"; sfxPower(); updateHud(); }
+});
+// 防止长按菜单 / 双击缩放等干扰游戏操作
+document.addEventListener("contextmenu",e=>{
+  if(e.target.closest && e.target.closest("#controls,#cv,#pausebtn")) e.preventDefault();
+});
+document.addEventListener("dblclick",e=>{
+  if(e.target.closest && e.target.closest("#controls,#cv")) e.preventDefault();
+});
+// 彻底禁止页面拖动/下拉（锁死滚动）；摇杆/放弹键已用 pointer 事件，这里拦 touch 滚动不影响游戏操作
+document.addEventListener("touchstart",e=>{ if(e.target.closest && e.target.closest("#cv")) e.preventDefault(); },{passive:false});
+document.addEventListener("touchmove",e=>{
+  // 任何触摸滑动都阻止默认滚动（CSS 已 overflow:hidden，这里是双保险防 iOS 橡皮筋回弹）
+  if(e.target.closest && e.target.closest("#controls,#cv,#pausebtn")) e.preventDefault();
+},{passive:false});
+document.addEventListener("gesturestart",e=>e.preventDefault()); // iOS 双击/捏合缩放
+
+/* ============ 绘制 ============ */
+function draw(t){
+  ctx.clearRect(0,0,W,H);
+  const bg=ctx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,"#0d2b4a"); bg.addColorStop(1,"#081c33");
+  ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+
+  const cols=grid[0].length, rows=grid.length;
+  const ox=Math.floor((W-cols*TILE)/2), oy=Math.floor((H-rows*TILE)/2);
+  ctx.save();
+  ctx.translate(ox,oy);
+
+  for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
+    const x=c*TILE, y=r*TILE;
+    const shim=0.5+0.5*Math.sin(t*1.7+c*0.8+r*1.3);
+    ctx.fillStyle=`rgb(${14+shim*10|0},${60+shim*22|0},${118+shim*30|0})`;
+    ctx.fillRect(x,y,TILE,TILE);
+    ctx.strokeStyle="rgba(8,26,48,0.55)";
+    ctx.strokeRect(x+0.5,y+0.5,TILE-1,TILE-1);
+    if((c*7+r*13)%11===0){
+      ctx.strokeStyle="rgba(46,150,110,0.5)";
+      ctx.lineWidth=1.5;
+      ctx.beginPath();
+      ctx.moveTo(x+10,y+34); ctx.quadraticCurveTo(x+14+shim*4,y+16,x+8,y+6);
+      ctx.moveTo(x+26,y+34); ctx.quadraticCurveTo(x+24-shim*4,y+18,x+30,y+8);
+      ctx.stroke();
+    }
+    if((c*5+r*9)%7===2){
+      const by=(t*14+(c*31+r*17))%40;
+      ctx.fillStyle="rgba(160,220,255,0.28)";
+      ctx.beginPath(); ctx.arc(x+8+(c%3)*8, y+36-by, 2, 0, 7); ctx.fill();
+    }
+  }
+
+  for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
+    const x=c*TILE, y=r*TILE, tl=grid[r][c];
+    if(tl===1) drawBrick(x,y,false,false);
+    else if(tl===4) drawBrick(x,y,false,true);
+    else if(tl===2) drawWater(x,y,t);
+    else if(tl===3) drawGate(x,y,t);
+  }
+
+  for(const p of powerups){
+    const bob=Math.sin(p.t*3)*3;
+    const x=p.x*TILE+TILE/2, y=p.y*TILE+TILE/2+bob;
+    ctx.save();
+    ctx.shadowColor=p.type.color; ctx.shadowBlur=10;
+    ctx.fillStyle=p.type.color;
+    ctx.beginPath(); roundRect(x-11,y-11,22,22,6); ctx.fill();
+    ctx.fillStyle="rgba(255,255,255,0.85)";
+    ctx.beginPath(); ctx.arc(x-4,y-5,3,0,7); ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.fillStyle="#fff"; ctx.font="bold 13px sans-serif";
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText(p.type.label,x+1,y+1);
+    ctx.restore();
+  }
+
+  for(const mo of monsters){
+    drawMonster(mo.px,mo.py,t+mo.wob);
+  }
+
+  for(const bl of blasts){
+    const k=bl.dur/BLAST_DUR;
+    for(const [bx,by] of bl.cells){
+      const x=bx*TILE+TILE/2, y=by*TILE+TILE/2;
+      const rad=TILE*0.55+k*TILE*0.25;
+      ctx.globalAlpha=(1-k)*0.8;
+      const g=ctx.createRadialGradient(x,y,2,x,y,rad);
+      g.addColorStop(0,"rgba(255,255,255,0.95)");
+      g.addColorStop(0.5,"rgba(150,220,255,0.6)");
+      g.addColorStop(1,"rgba(60,140,255,0)");
+      ctx.fillStyle=g;
+      ctx.beginPath(); ctx.arc(x,y,rad,0,7); ctx.fill();
+      ctx.globalAlpha=1;
+    }
+  }
+
+  for(const b of bombs){
+    const x=b.x*TILE+TILE/2, y=b.y*TILE+TILE/2;
+    const blink=b.t>BOMB_ARM-0.45 ? (Math.sin(b.t*28)>0?1:0.45) : 1;
+    const pulse=1+0.07*Math.sin(b.t*9);
+    ctx.save();
+    ctx.globalAlpha=blink;
+    const g=ctx.createRadialGradient(x-6,y-8,3,x,y,TILE*0.46*pulse);
+    g.addColorStop(0,"rgba(230,250,255,0.98)");
+    g.addColorStop(0.35,"rgba(120,195,255,0.92)");
+    g.addColorStop(1,"rgba(40,120,220,0.85)");
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.arc(x,y,TILE*0.44*pulse,0,7); ctx.fill();
+    ctx.strokeStyle="rgba(20,80,160,0.6)"; ctx.lineWidth=2; ctx.stroke();
+    ctx.fillStyle="rgba(255,255,255,0.75)";
+    ctx.beginPath(); ctx.arc(x-8,y-9,5,0,7); ctx.fill();
+    ctx.fillStyle="#fff";
+    ctx.beginPath(); ctx.arc(x+10,y-14,2+Math.random()*2,0,7); ctx.fill();
+    ctx.restore();
+  }
+
+  drawPlayer(t);
+
+  for(const p of particles){
+    ctx.globalAlpha=Math.max(0,p.life/p.max);
+    ctx.fillStyle=p.bubble?"rgba(180,235,255,0.9)":"rgba(255,255,255,0.9)";
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,7); ctx.fill();
+    ctx.globalAlpha=1;
+  }
+  ctx.restore();
+
+  const startSub  = IS_TOUCH ? "点按画布开始 · 打完怪物 且 走进水门 过关" : "按 空格键 开始游戏 · 打完怪物 且 走进水门 过关";
+  const pauseSub  = IS_TOUCH ? "点按画布 或 ⏸ 继续" : "按 P 继续";
+  const againSub  = IS_TOUCH ? "点按画布" : "按 回车/空格";
+  if(state==="ready") overlay("💧 水弹泡泡岛",startSub);
+  if(state==="pause") overlay("⏸ 已暂停",pauseSub);
+  if(state==="complete") overlay("🌊 水门通过！过关 +100","即将进入下一关…");
+  if(state==="dying") overlay("💥 被水花溅中！","生命 -1");
+  if(state==="over") overlay("💀 游戏结束","最终得分 "+score+"  ·  "+againSub+" 重新开始");
+  if(state==="win") overlay("🏆 全部关卡通过！","总得分 "+score+"  ·  "+againSub+" 再玩一次");
+}
+
+function overlay(title,sub){
+  ctx.fillStyle="rgba(4,14,28,0.62)";
+  ctx.fillRect(0,0,W,H);
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillStyle="#cfeaff"; ctx.font="bold 40px sans-serif";
+  ctx.shadowColor="#3d9bff"; ctx.shadowBlur=18;
+  ctx.fillText(title,W/2,H/2-26);
+  ctx.shadowBlur=0;
+  ctx.fillStyle="#9cc4e8"; ctx.font="18px sans-serif";
+  ctx.fillText(sub,W/2,H/2+26);
+}
+
+function roundRect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+
+function drawWater(x,y,t){
+  // 实心水块（障碍）：深色 + 亮边框 + 气泡，与"可走的水面"明确区分
+  // 底色：深池
+  ctx.fillStyle="#08304f";
+  ctx.fillRect(x+1,y+1,TILE-2,TILE-2);
+  // 内层渐变水
+  const g=ctx.createLinearGradient(x,y,x,y+TILE);
+  g.addColorStop(0,"#1a6fa6"); g.addColorStop(1,"#0c456f");
+  ctx.fillStyle=g; ctx.fillRect(x+3,y+3,TILE-6,TILE-6);
+  // 波纹（更明显的白色浪）
+  ctx.strokeStyle="rgba(190,240,255,0.85)"; ctx.lineWidth=2;
+  for(let i=0;i<3;i++){
+    const ph=Math.sin(t*2.6+i*1.5+(x+y)*0.05)*2;
+    ctx.beginPath();
+    ctx.moveTo(x+6, y+10+i*9+ph);
+    ctx.quadraticCurveTo(x+TILE/2, y+10+i*9+ph+4, x+TILE-6, y+10+i*9+ph);
+    ctx.stroke();
+  }
+  // 关键：亮色粗边框，让它读作"一块固体障碍"而非水面
+  ctx.strokeStyle="#7fe3ff"; ctx.lineWidth=3;
+  ctx.strokeRect(x+2,y+2,TILE-4,TILE-4);
+  ctx.strokeStyle="rgba(255,255,255,0.35)"; ctx.lineWidth=1;
+  ctx.strokeRect(x+5,y+5,TILE-10,TILE-10);
+}
+function drawGate(x,y,t){
+  // 水门：怪物全清前金色（当实心墙挡路、不可进）；清光后边框/发光变绿（已解锁、可直接走进）
+  const pulse=0.55+0.45*Math.sin(t*3);
+  const unlocked = monsters.length===0;
+  const frameColor = unlocked ? "#5fe98b" : "#ffce5a";
+  const glowColor  = unlocked ? "rgba(95,233,139," : "rgba(255,210,90,";
+  const labelColor = unlocked ? "#bff5cf" : "#ffe6a8";
+  ctx.fillStyle="#14324a"; ctx.fillRect(x,y,TILE,TILE);
+  ctx.save();
+  ctx.shadowColor=glowColor+(0.5+0.4*pulse)+")"; ctx.shadowBlur=12;
+  // 门框
+  ctx.strokeStyle=frameColor; ctx.lineWidth=4;
+  ctx.strokeRect(x+5,y+3,TILE-10,TILE-6);
+  // 门内水面
+  const g=ctx.createLinearGradient(x,y,x,y+TILE);
+  g.addColorStop(0,"#7fd4ff"); g.addColorStop(1,"#2f8fd6");
+  ctx.fillStyle=g;
+  ctx.fillRect(x+7,y+5,TILE-14,TILE-10);
+  // 波纹
+  ctx.strokeStyle="rgba(255,255,255,0.6)"; ctx.lineWidth=1.5;
+  const ph=Math.sin(t*3)*2;
+  ctx.beginPath();
+  ctx.moveTo(x+9,y+TILE/2+ph);
+  ctx.quadraticCurveTo(x+TILE/2,y+TILE/2+ph+2,x+TILE-9,y+TILE/2-ph);
+  ctx.stroke();
+  ctx.restore();
+  // 标签
+  ctx.fillStyle=labelColor; ctx.font="bold 12px sans-serif";
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillText(unlocked?"水门·可进":"水门",x+TILE/2,y-6);
+}
+function drawMonster(x,y,t){
+  const w=Math.sin(t*6+x)*1.5;
+  ctx.save();
+  ctx.translate(x,y);
+  // 身体（紫色小怪）
+  ctx.fillStyle="#7a3fd1";
+  ctx.beginPath(); ctx.arc(0,0,10,0,7); ctx.fill();
+  ctx.fillStyle="#5a28a8";
+  ctx.beginPath(); ctx.arc(0,3,10,0,Math.PI); ctx.fill();
+  // 眼睛
+  ctx.fillStyle="#fff";
+  ctx.beginPath(); ctx.arc(-3.5+w*0.3,-2,3,0,7); ctx.arc(3.5+w*0.3,-2,3,0,7); ctx.fill();
+  ctx.fillStyle="#1c0a30";
+  ctx.beginPath(); ctx.arc(-3.2+w*0.3,-2,1.4,0,7); ctx.arc(3.8+w*0.3,-2,1.4,0,7); ctx.fill();
+  // 小刺
+  ctx.strokeStyle="#9a5cf0"; ctx.lineWidth=2;
+  for(let i=-1;i<=1;i++){
+    ctx.beginPath();
+    ctx.moveTo(i*5, -9);
+    ctx.lineTo(i*5+1, -13+Math.abs(i));
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawBrick(x,y,isExit,isBorder){
+  if(isBorder){
+    ctx.fillStyle="#2a3242";
+    ctx.fillRect(x,y,TILE,TILE);
+    ctx.fillStyle="rgba(255,255,255,0.06)";
+    ctx.fillRect(x,y,TILE,5);
+    ctx.strokeStyle="#151b26";
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(x,y+TILE/2); ctx.lineTo(x+TILE,y+TILE/2);
+    ctx.moveTo(x+TILE/4,y); ctx.lineTo(x+TILE/4,y+TILE/2);
+    ctx.moveTo(x+TILE*3/4,y+TILE/2); ctx.lineTo(x+TILE*3/4,y+TILE);
+    ctx.stroke();
+    ctx.strokeStyle="#10151f";
+    ctx.strokeRect(x+1,y+1,TILE-2,TILE-2);
+    return;
+  }
+  ctx.fillStyle=isExit?"#315c37":"#5a6b85";
+  ctx.fillRect(x,y,TILE,TILE);
+  ctx.fillStyle=isExit?"rgba(120,255,150,0.25)":"rgba(255,255,255,0.22)";
+  ctx.fillRect(x,y,TILE,7);
+  ctx.strokeStyle=isExit?"#234028":"#2b3547";
+  ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.moveTo(x,y+TILE/2); ctx.lineTo(x+TILE,y+TILE/2);
+  ctx.moveTo(x+TILE/2,y); ctx.lineTo(x+TILE/2,y+TILE/2);
+  ctx.moveTo(x+TILE/4,y+TILE/2); ctx.lineTo(x+TILE/4,y+TILE);
+  ctx.moveTo(x+TILE*3/4,y+TILE/2); ctx.lineTo(x+TILE*3/4,y+TILE);
+  ctx.stroke();
+  ctx.strokeStyle=isExit?"#1c3320":"#2a3446";
+  ctx.strokeRect(x+1,y+1,TILE-2,TILE-2);
+  if(isExit){
+    const pulse=0.6+0.4*Math.sin(performance.now()/1000*3);
+    ctx.save();
+    ctx.globalAlpha=pulse;
+    ctx.fillStyle="#ffd94a";
+    ctx.shadowColor="#ffd94a"; ctx.shadowBlur=10;
+    ctx.font="bold 16px sans-serif";
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText("水门",x+TILE/2,y+TILE/2+1);
+    ctx.restore();
+  }
+}
+
+function drawPlayer(t){
+  if(state==="dying") return;
+  const blink=player.invuln>0 && Math.floor(t*10)%2===0;
+  ctx.save();
+  if(blink) ctx.globalAlpha=0.45;
+  const x=player.px+TILE/2, y=player.py+TILE/2;
+  ctx.fillStyle="rgba(0,0,0,0.28)";
+  ctx.beginPath(); ctx.ellipse(x,y+13,11,4.5,0,0,7); ctx.fill();
+  const rr=(t*40)%TILE;
+  ctx.strokeStyle=`rgba(140,210,255,${0.3*(1-rr/TILE)})`;
+  ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.ellipse(x,y+10,rr*0.5,rr*0.2,0,0,7); ctx.stroke();
+  ctx.fillStyle="#ffd25e";
+  ctx.beginPath(); ctx.arc(x,y+1,11.5,0,7); ctx.fill();
+  ctx.strokeStyle="#b8860f"; ctx.lineWidth=1.5; ctx.stroke();
+  ctx.fillStyle="#274f7c";
+  ctx.beginPath(); ctx.arc(x,y-2,10.5,Math.PI*1.05,Math.PI*1.95); ctx.fill();
+  const fx=player.face.x*3, fy=player.face.y*3;
+  ctx.fillStyle="#fff";
+  ctx.beginPath(); ctx.arc(x-4+fx,y-1+fy,3,0,7); ctx.arc(x+4+fx,y-1+fy,3,0,7); ctx.fill();
+  ctx.fillStyle="#26334d";
+  ctx.beginPath(); ctx.arc(x-4+fx*1.4,y-1+fy*1.4,1.5,0,7); ctx.arc(x+4+fx*1.4,y-1+fy*1.4,1.5,0,7); ctx.fill();
+  ctx.strokeStyle="#8a5a12"; ctx.lineWidth=1.2;
+  ctx.beginPath(); ctx.arc(x+fx*0.5,y+4+fy*0.5,3.5,0.15*Math.PI,0.85*Math.PI); ctx.stroke();
+  ctx.restore();
+}
+
+/* ============ 启动 ============ */
+initLevel();
+state="ready";            // 先停在启动画面，按空格才开始
+updateHud();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
